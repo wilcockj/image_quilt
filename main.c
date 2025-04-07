@@ -21,24 +21,6 @@ float euclid_dist(Vector3 color1, Vector3 color2) {
 }
 
 float redmean_diff(Vector3 color1, Vector3 color2) {
-  /*
-  color1 = Vector3Divide(color1, (Vector3){255, 255, 255});
-  color2 = Vector3Divide(color2, (Vector3){255, 255, 255});
-
-  float redmean = 0.5 * (color1.x + color2.x);
-
-  int red_diff = abs(color1.x - color2.x);
-  int green_diff = abs(color1.y - color2.y);
-  int blue_diff = abs(color1.z - color2.z);
-
-  float color_diff_interior =
-      ((2 + ((float)redmean / 256) * red_diff * red_diff +
-        4 * green_diff * green_diff + (2 + (255 - redmean) / 256)) *
-       blue_diff * blue_diff);
-  float color_diff = sqrt(color_diff_interior);
-  printf("Got color diff %f\n", color_diff);
-  return color_diff;
-  */
   // Calculate the average red value (redmean)
   float redmean = 0.5f * (color1.x + color2.x);
 
@@ -48,21 +30,15 @@ float redmean_diff(Vector3 color1, Vector3 color2) {
   float green_diff = fabs(color1.y - color2.y);
   float blue_diff = fabs(color1.z - color2.z);
 
-  // Here, we weight the red_diff by the redmean to emphasize red differences
-  float weighted_red_diff = (redmean / 256.0f) * red_diff * red_diff;
+  float weighted_red_diff = (2 + redmean / 256.0f) * red_diff * red_diff;
 
-  // Optionally, you can apply different weights to the other components
-  // For example, let's say green and blue have a lower weight
-  float weighted_green_diff =
-      0.5f * green_diff * green_diff; // Just an example weight
-  float weighted_blue_diff =
-      0.2f * blue_diff * blue_diff; // Just an example weight
+  float weighted_green_diff = 4.0f * green_diff * green_diff;
+  float weighted_blue_diff = (2.0f + (255.0f - redmean) / 256.0f) * blue_diff *
+                             blue_diff; // Just an example weight
 
-  // Combine all the components for the total color difference
   float color_diff_interior =
       (weighted_red_diff + weighted_green_diff + weighted_blue_diff);
 
-  // Finally, take the square root to get the final distance
   float color_diff = sqrt(color_diff_interior);
 
   return color_diff / 255;
