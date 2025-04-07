@@ -6,6 +6,9 @@
 #include <time.h>
 #define MAX_DIFF 441.67 // sqrt(255^2 + 255^2 + 255^2)
 
+#define FLAG_IMPLEMENTATION
+#include "flag.h"
+
 typedef enum { EUCLIDEAN_DIST, REDMEAN_DIST } dist_enum;
 
 uint64_t get_current_ms() {
@@ -46,7 +49,21 @@ float redmean_diff(Vector3 color1, Vector3 color2) {
   return color_diff / 255;
 }
 
+void usage(FILE *stream) {
+  fprintf(stream, "Usage: ./image_quilt [OPTIONS] [--] input_files\n");
+  fprintf(stream, "OPTIONS:\n");
+  flag_print_options(stream);
+}
+
 int main(int argc, char *argv[]) {
+
+  char **image_path = flag_str("image_name", NULL, "filepath of image to load");
+
+  if (!flag_parse(argc, argv)) {
+    usage(stderr);
+    flag_print_error(stderr);
+    exit(1);
+  }
 
   const int screenWidth = 800;
   const int screenHeight = 600;
@@ -56,8 +73,15 @@ int main(int argc, char *argv[]) {
   // plan, load 2 images
   // right click moves one
   // left click moves the other
-  Image image1 = LoadImage("rainbow.jpg");
-  Image image2 = LoadImage("rainbow.jpg");
+  Image image1;
+  Image image2;
+  if (*image_path != NULL) {
+    image1 = LoadImage(*image_path);
+    image2 = LoadImage(*image_path);
+  } else {
+    image1 = LoadImage("rainbow.jpg");
+    image2 = LoadImage("rainbow.jpg");
+  }
 
   ImageFormat(&image1, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
   ImageFormat(&image2, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
