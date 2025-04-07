@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
-#define MAX_DIFF 441.67
+#define MAX_DIFF 441.67 // sqrt(255^2 + 255^2 + 255^2)
 
 uint64_t get_current_ms() {
 
@@ -33,8 +33,8 @@ float redmean_diff(Vector3 color1, Vector3 color2) {
   float weighted_red_diff = (2 + redmean / 256.0f) * red_diff * red_diff;
 
   float weighted_green_diff = 4.0f * green_diff * green_diff;
-  float weighted_blue_diff = (2.0f + (255.0f - redmean) / 256.0f) * blue_diff *
-                             blue_diff; // Just an example weight
+  float weighted_blue_diff =
+      (2.0f + (255.0f - redmean) / 256.0f) * blue_diff * blue_diff;
 
   float color_diff_interior =
       (weighted_red_diff + weighted_green_diff + weighted_blue_diff);
