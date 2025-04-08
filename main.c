@@ -6,6 +6,11 @@
 #include <time.h>
 #define MAX_DIFF 441.67 // sqrt(255^2 + 255^2 + 255^2)
 
+#define FLAG_IMPLEMENTATION
+#include "flag.h"
+
+typedef enum { EUCLIDEAN_DIST, REDMEAN_DIST } dist_enum;
+
 uint64_t get_current_ms() {
 
   struct timespec time;
@@ -22,29 +27,43 @@ float euclid_dist(Vector3 color1, Vector3 color2) {
 
 float redmean_diff(Vector3 color1, Vector3 color2) {
   // Calculate the average red value (redmean)
-  float redmean = 0.5f * (color1.x + color2.x);
+  double redmean = 0.5f * (color1.x + color2.x);
 
   // Calculate the absolute differences between color components (keeping them
   // as floats)
-  float red_diff = fabs(color1.x - color2.x);
-  float green_diff = fabs(color1.y - color2.y);
-  float blue_diff = fabs(color1.z - color2.z);
+  double red_diff = fabs(color1.x - color2.x);
+  double green_diff = fabs(color1.y - color2.y);
+  double blue_diff = fabs(color1.z - color2.z);
 
-  float weighted_red_diff = (2 + redmean / 256.0f) * red_diff * red_diff;
+  double weighted_red_diff = (2 + redmean / 256.0f) * red_diff * red_diff;
 
-  float weighted_green_diff = 4.0f * green_diff * green_diff;
-  float weighted_blue_diff =
+  double weighted_green_diff = 4.0f * green_diff * green_diff;
+  double weighted_blue_diff =
       (2.0f + (255.0f - redmean) / 256.0f) * blue_diff * blue_diff;
 
-  float color_diff_interior =
+  double color_diff_interior =
       (weighted_red_diff + weighted_green_diff + weighted_blue_diff);
 
-  float color_diff = sqrt(color_diff_interior);
+  double color_diff = sqrt(color_diff_interior);
 
   return color_diff / 255;
 }
 
+void usage(FILE *stream) {
+  fprintf(stream, "Usage: ./image_quilt [OPTIONS] [--] input_files\n");
+  fprintf(stream, "OPTIONS:\n");
+  flag_print_options(stream);
+}
+
 int main(int argc, char *argv[]) {
+
+  char **image_path = flag_str("image_name", NULL, "filepath of image to load");
+
+  if (!flag_parse(argc, argv)) {
+    usage(stderr);
+    flag_print_error(stderr);
+    exit(1);
+  }
 
   const int screenWidth = 800;
   const int screenHeight = 600;
@@ -54,8 +73,15 @@ int main(int argc, char *argv[]) {
   // plan, load 2 images
   // right click moves one
   // left click moves the other
-  Image image1 = LoadImage("rocks.jpeg");
-  Image image2 = LoadImage("rocks.jpeg");
+  Image image1;
+  Image image2;
+  if (*image_path != NULL) {
+    image1 = LoadImage(*image_path);
+    image2 = LoadImage(*image_path);
+  } else {
+    image1 = LoadImage("rainbow.jpg");
+    image2 = LoadImage("rainbow.jpg");
+  }
 
   ImageFormat(&image1, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
   ImageFormat(&image2, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
@@ -83,6 +109,7 @@ int main(int argc, char *argv[]) {
   Color *image1_colors = LoadImageColors(image1);
   Color *image2_colors = LoadImageColors(image2);
   Vector2 col_topr = {0};
+  dist_enum dist = EUCLIDEAN_DIST;
   while (!WindowShouldClose()) {
     BeginDrawing();
     ClearBackground(RAYWHITE);
@@ -106,6 +133,18 @@ int main(int argc, char *argv[]) {
         // something changed
         need_update_diff = true;
       }
+    }
+
+    if (IsKeyPressed(KEY_X)) {
+      switch (dist) {
+      case EUCLIDEAN_DIST:
+        dist = REDMEAN_DIST;
+        break;
+      case REDMEAN_DIST:
+        dist = EUCLIDEAN_DIST;
+        break;
+      }
+      need_update_diff = true;
     }
 
     if (need_update_diff) {
@@ -140,9 +179,27 @@ int main(int argc, char *argv[]) {
 
           Vector3 image2_color_vec = {image2_pixel.r, image2_pixel.g,
                                       image2_pixel.b};
+<<<<<<< HEAD
           float diff = euclid_dist(image1_color_vec, image2_color_vec);
           DrawPixel(i - col_topr.x, j - col_topr.y,
                     (Color){255 * diff, 255 * diff, 255 * diff, 255});
+||||||| dc3192c
+          float diff = euclid_dist(image1_color_vec, image2_color_vec);
+          DrawPixel(i, j, (Color){255 * diff, 255 * diff, 255 * diff, 255});
+=======
+
+          float diff = 0;
+          switch (dist) {
+          case EUCLIDEAN_DIST:
+            diff = euclid_dist(image1_color_vec, image2_color_vec);
+            break;
+          case REDMEAN_DIST:
+            diff = redmean_diff(image1_color_vec, image2_color_vec);
+            break;
+          }
+
+          DrawPixel(i, j, (Color){255 * diff, 255 * diff, 255 * diff, 255});
+>>>>>>> 1409f4b8024f53619675cc5f667eddecc5fe3657
         }
       }
       col_topr = (Vector2){image_overlap.x, image_overlap.y};
