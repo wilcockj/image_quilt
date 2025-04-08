@@ -179,14 +179,6 @@ int main(int argc, char *argv[]) {
 
           Vector3 image2_color_vec = {image2_pixel.r, image2_pixel.g,
                                       image2_pixel.b};
-<<<<<<< HEAD
-          float diff = euclid_dist(image1_color_vec, image2_color_vec);
-          DrawPixel(i - col_topr.x, j - col_topr.y,
-                    (Color){255 * diff, 255 * diff, 255 * diff, 255});
-||||||| dc3192c
-          float diff = euclid_dist(image1_color_vec, image2_color_vec);
-          DrawPixel(i, j, (Color){255 * diff, 255 * diff, 255 * diff, 255});
-=======
 
           float diff = 0;
           switch (dist) {
@@ -198,8 +190,8 @@ int main(int argc, char *argv[]) {
             break;
           }
 
-          DrawPixel(i, j, (Color){255 * diff, 255 * diff, 255 * diff, 255});
->>>>>>> 1409f4b8024f53619675cc5f667eddecc5fe3657
+          DrawPixel(i - col_topr.x, j - col_topr.y,
+                    (Color){255 * diff, 255 * diff, 255 * diff, 255});
         }
       }
       col_topr = (Vector2){image_overlap.x, image_overlap.y};
