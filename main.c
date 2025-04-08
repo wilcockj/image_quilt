@@ -74,7 +74,7 @@ int main(int argc, char *argv[]) {
   // updated when those images move
   Vector2 max_vec = Vector2Max((Vector2){image1.width, image1.height},
                                (Vector2){image2.width, image2.height});
-  RenderTexture2D diff_text = LoadRenderTexture(screenWidth, screenHeight);
+  RenderTexture2D diff_text = LoadRenderTexture(max_vec.x, max_vec.y);
 
   Vector2 image1_loc = {0, 0};
   Vector2 image2_loc = {image1.width, 0};
@@ -82,6 +82,7 @@ int main(int argc, char *argv[]) {
   Rectangle image_overlap = {0};
   Color *image1_colors = LoadImageColors(image1);
   Color *image2_colors = LoadImageColors(image2);
+  Vector2 col_topr = {0};
   while (!WindowShouldClose()) {
     BeginDrawing();
     ClearBackground(RAYWHITE);
@@ -140,9 +141,11 @@ int main(int argc, char *argv[]) {
           Vector3 image2_color_vec = {image2_pixel.r, image2_pixel.g,
                                       image2_pixel.b};
           float diff = euclid_dist(image1_color_vec, image2_color_vec);
-          DrawPixel(i, j, (Color){255 * diff, 255 * diff, 255 * diff, 255});
+          DrawPixel(i - col_topr.x, j - col_topr.y,
+                    (Color){255 * diff, 255 * diff, 255 * diff, 255});
         }
       }
+      col_topr = (Vector2){image_overlap.x, image_overlap.y};
       uint64_t stop = get_current_ms();
       printf("making image diff mask was took %ld\n", stop - start);
 
@@ -155,7 +158,7 @@ int main(int argc, char *argv[]) {
     DrawTextureRec(diff_text.texture,
                    (Rectangle){0, 0, (float)diff_text.texture.width,
                                (float)-diff_text.texture.height},
-                   (Vector2){0, 0}, WHITE);
+                   col_topr, WHITE);
     EndDrawing();
   }
 
