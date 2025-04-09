@@ -49,6 +49,11 @@ float redmean_diff(Vector3 color1, Vector3 color2) {
   return color_diff / 255;
 }
 
+bool AreRectsEqual(Rectangle rect1, Rectangle rect2) {
+  return rect1.x == rect2.x && rect1.y == rect2.y &&
+         rect1.width == rect2.width && rect1.height == rect2.height;
+}
+
 void usage(FILE *stream) {
   fprintf(stream, "Usage: ./image_quilt [OPTIONS] [--] input_files\n");
   fprintf(stream, "OPTIONS:\n");
@@ -106,33 +111,89 @@ int main(int argc, char *argv[]) {
   Vector2 image2_loc = {image1.width, 0};
   bool need_update_diff = true;
   Rectangle image_overlap = {0};
+  Rectangle prev_image_overlap = {0};
   Color *image1_colors = LoadImageColors(image1);
   Color *image2_colors = LoadImageColors(image2);
   Vector2 col_topr = {0};
   dist_enum dist = EUCLIDEAN_DIST;
+
+  Camera2D camera = {0};
+  camera.zoom = 1.0f;
   while (!WindowShouldClose()) {
+    // Zoom based on mouse wheel
+    float wheel = GetMouseWheelMove();
+    if (wheel != 0) {
+      // Get the world point that is under the mouse
+      Vector2 mouseWorldPos = GetScreenToWorld2D(GetMousePosition(), camera);
+
+      // Set the offset to where the mouse is
+      camera.offset = GetMousePosition();
+
+      // Set the target to match, so that the camera maps the world space point
+      // under the cursor to the screen space point under the cursor at any zoom
+      camera.target = mouseWorldPos;
+
+      // Zoom increment
+      // Uses log scaling to provide consistent zoom speed
+      float scale = 0.2f * wheel;
+      camera.zoom = Clamp(expf(logf(camera.zoom) + scale), 0.125f, 64.0f);
+    }
+
+    // Translate based on mouse right click
+    if (IsMouseButtonDown(MOUSE_BUTTON_MIDDLE)) {
+      Vector2 delta = GetMouseDelta();
+      delta = Vector2Scale(delta, -1.0f / camera.zoom);
+      camera.target = Vector2Add(camera.target, delta);
+    }
+
     BeginDrawing();
     ClearBackground(RAYWHITE);
-    DrawTextureV(texture1, image1_loc, WHITE);
-    DrawTextureV(texture2, image2_loc, WHITE);
 
     // Translate based on mouse right click
     if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
       Vector2 delta = GetMouseDelta();
+      delta = Vector2Scale(delta, 1.0f / camera.zoom);
+
+      if (delta.x >= 0) {
+        delta.x = ceil(delta.x);
+      } else {
+        delta.x = floor(delta.x);
+      }
+      if (delta.y >= 0) {
+        delta.y = ceil(delta.y);
+      } else {
+        delta.y = floor(delta.y);
+      }
       image1_loc = Vector2Add(image1_loc, delta);
+
+      image1_loc.x = floor(image1_loc.x);
+      image1_loc.y = floor(image1_loc.y);
       if (!Vector2Equals(delta, (Vector2){0, 0})) {
         // something changed
-        need_update_diff = true;
       }
+      need_update_diff = true;
     }
 
     if (IsMouseButtonDown(MOUSE_BUTTON_RIGHT)) {
       Vector2 delta = GetMouseDelta();
+      delta = Vector2Scale(delta, 1.0f / camera.zoom);
+      if (delta.x >= 0) {
+        delta.x = ceil(delta.x);
+      } else {
+        delta.x = floor(delta.x);
+      }
+      if (delta.y >= 0) {
+        delta.y = ceil(delta.y);
+      } else {
+        delta.y = floor(delta.y);
+      }
       image2_loc = Vector2Add(image2_loc, delta);
+      image2_loc.x = floor(image2_loc.x);
+      image2_loc.y = floor(image2_loc.y);
       if (!Vector2Equals(delta, (Vector2){0, 0})) {
         // something changed
-        need_update_diff = true;
       }
+      need_update_diff = true;
     }
 
     if (IsKeyPressed(KEY_X)) {
@@ -147,21 +208,27 @@ int main(int argc, char *argv[]) {
       need_update_diff = true;
     }
 
-    if (need_update_diff) {
+    Rectangle image_1_rect = {image1_loc.x, image1_loc.y, image1.width,
+                              image1.height};
+
+    Rectangle image_2_rect = {image2_loc.x, image2_loc.y, image2.width,
+                              image2.height};
+    image_overlap = GetCollisionRec(image_1_rect, image_2_rect);
+
+    if (!AreRectsEqual(image_overlap, prev_image_overlap)) {
       BeginTextureMode(diff_text);
       // drawing to render texture, diff
       // find overlap rectangle
-      Rectangle image_1_rect = {image1_loc.x, image1_loc.y, image1.width,
-                                image1.height};
-
-      Rectangle image_2_rect = {image2_loc.x, image2_loc.y, image2.width,
-                                image2.height};
-      image_overlap = GetCollisionRec(image_1_rect, image_2_rect);
 
       printf("Got overlap rect %f,%f,%f,%f\n", image_overlap.x, image_overlap.y,
              image_overlap.width, image_overlap.height);
+
+      printf("images at %f,%f %f,%f\n", image1_loc.x, image1_loc.y,
+             image2_loc.x, image2_loc.y);
       ClearBackground(BLANK);
       uint64_t start = get_current_ms();
+      uint16_t pixels_drawn = 0;
+      col_topr = (Vector2){image_overlap.x, image_overlap.y};
       for (int j = image_overlap.y; j < image_overlap.y + image_overlap.height;
            j++) {
         for (int i = image_overlap.x; i < image_overlap.x + image_overlap.width;
@@ -192,23 +259,30 @@ int main(int argc, char *argv[]) {
 
           DrawPixel(i - col_topr.x, j - col_topr.y,
                     (Color){255 * diff, 255 * diff, 255 * diff, 255});
+          pixels_drawn++;
         }
       }
-      col_topr = (Vector2){image_overlap.x, image_overlap.y};
+
       uint64_t stop = get_current_ms();
-      printf("making image diff mask was took %ld\n", stop - start);
+      printf("making image diff mask was took %ld at %f,%f drew %d pixels\n",
+             stop - start, image_overlap.x, image_overlap.y, pixels_drawn);
 
       EndTextureMode();
       need_update_diff = false;
     }
 
-    // DrawRectanglePro(image_overlap, (Vector2){0, 0}, 0, RED);
+    BeginMode2D(camera);
+    DrawTextureV(texture1, image1_loc, WHITE);
+    DrawTextureV(texture2, image2_loc, WHITE);
 
     DrawTextureRec(diff_text.texture,
                    (Rectangle){0, 0, (float)diff_text.texture.width,
                                (float)-diff_text.texture.height},
                    col_topr, WHITE);
+    EndMode2D();
     EndDrawing();
+
+    prev_image_overlap = image_overlap;
   }
 
   return EXIT_SUCCESS;
