@@ -1,15 +1,123 @@
+#include "game.h"
+#include <limits.h>
 #include <raylib.h>
 #include <raymath.h>
 #include <stdint.h>
-#include <time.h>
 #include <stdio.h>
-#include "game.h"
+#include <stdlib.h>
+#include <time.h>
 
 Color *image1_colors;
 Color *image2_colors;
 bool need_update_diff;
 
 #define MAX_DIFF 441.67 // sqrt(255^2 + 255^2 + 255^2)
+
+void DrawBestPath(Texture diff_text, Rectangle image_overlap) {
+
+  // UNFORMATED
+  Image full_image = LoadImageFromTexture(diff_text);
+
+  // get image of just the overlap part
+  Image diff_image = ImageFromImage(full_image, image_overlap);
+  Color *diff_colors = LoadImageColors(diff_image);
+  int width = (int)image_overlap.width;
+  int height = (int)image_overlap.height;
+  int32_t *prev =
+      calloc(sizeof(int32_t), image_overlap.width * image_overlap.height);
+  uint16_t *dist =
+      calloc(sizeof(uint16_t), image_overlap.width * image_overlap.height);
+
+  // will set to -1 when removed
+  int32_t *queue =
+      calloc(sizeof(int32_t), image_overlap.width * image_overlap.height);
+  uint16_t queue_len = image_overlap.width * image_overlap.height;
+
+  for (int i = 0; i < width * height; i++) {
+    prev[i] = -1;
+    int x = i % width;
+    int y = i / width;
+    if (i < width) {
+      dist[i] = diff_colors[(width - x) + (y - height) * width].r;
+    } else {
+      dist[i] = UINT16_MAX;
+    }
+    queue[i] = i;
+  }
+
+  while (queue_len) {
+    uint16_t min_distance = UINT16_MAX;
+    int16_t min_index = -1;
+    for (uint32_t i = 0; i < queue_len; i++) {
+      if (dist[queue[i]] < min_distance) {
+        min_index = i;
+        min_distance = dist[queue[i]];
+      }
+    }
+
+    // If reached the last row, stop early
+    int current = queue[min_index];
+    if (current >= width * (height - 1))
+      break;
+
+    // Remove current from queue
+    queue[min_index] = queue[--queue_len];
+
+    // Neighbors: top-left, top, top-right, left, right, bottom-left, bottom,
+    // bottom-right
+    int x = current % width;
+    int y = current / width;
+
+    for (int dy = -1; dy <= 1; dy++) {
+      for (int dx = -1; dx <= 1; dx++) {
+        if (dx == 0 && dy == 0)
+          continue;
+
+        int nx = x + dx;
+        int ny = y + dy;
+
+        if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
+          int neighbor = ny * width + nx;
+          uint16_t alt = dist[current] + diff_colors[neighbor].r;
+          if (alt < dist[neighbor]) {
+            dist[neighbor] = alt;
+            prev[neighbor] = current;
+          }
+        }
+      }
+    }
+  }
+  printf("visited %d pixels\n", (width * height) - queue_len);
+
+  // Find the end of the best path in the last row
+  int best_end = -1;
+  uint16_t best_cost = UINT16_MAX;
+  for (int x = 0; x < width; x++) {
+    int i = (height - 1) * width + x;
+    if (dist[i] < best_cost) {
+      best_cost = dist[i];
+      best_end = i;
+    }
+  }
+
+  // Draw the best path backwards
+  int current = best_end;
+  while (current != -1) {
+    int x = current % width;
+    int y = current / width;
+    // printf("drawing pixel at %d,%d\n", x, y);
+    DrawPixel(x, y, RED); // Or use any color you want
+    current = prev[current];
+  }
+
+  free(dist);
+  free(prev);
+  free(queue);
+
+  UnloadImageColors(diff_colors);
+  UnloadImage(diff_image);
+  UnloadImage(full_image);
+}
 
 uint64_t get_current_ms() {
 
@@ -70,7 +178,8 @@ void render(bool *running, char *errors, game_state *state) {
   float wheel = GetMouseWheelMove();
   if (wheel != 0) {
     // Get the world point that is under the mouse
-    Vector2 mouseWorldPos = GetScreenToWorld2D(GetMousePosition(), state->camera);
+    Vector2 mouseWorldPos =
+        GetScreenToWorld2D(GetMousePosition(), state->camera);
 
     // Set the offset to where the mouse is
     state->camera.offset = GetMousePosition();
@@ -82,7 +191,8 @@ void render(bool *running, char *errors, game_state *state) {
     // Zoom increment
     // Uses log scaling to provide consistent zoom speed
     float scale = 0.2f * wheel;
-    state->camera.zoom = Clamp(expf(logf(state->camera.zoom) + scale), 0.125f, 64.0f);
+    state->camera.zoom =
+        Clamp(expf(logf(state->camera.zoom) + scale), 0.125f, 64.0f);
   }
 
   // Translate based on mouse right click
@@ -154,11 +264,11 @@ void render(bool *running, char *errors, game_state *state) {
     need_update_diff = true;
   }
 
-  Rectangle image_1_rect = {state->image1_loc.x, state->image1_loc.y, state->image1.width,
-                            state->image1.height};
+  Rectangle image_1_rect = {state->image1_loc.x, state->image1_loc.y,
+                            state->image1.width, state->image1.height};
 
-  Rectangle image_2_rect = {state->image2_loc.x, state->image2_loc.y, state->image2.width,
-                            state->image2.height};
+  Rectangle image_2_rect = {state->image2_loc.x, state->image2_loc.y,
+                            state->image2.width, state->image2.height};
   state->image_overlap = GetCollisionRec(image_1_rect, image_2_rect);
 
   if (need_update_diff) {
@@ -166,19 +276,21 @@ void render(bool *running, char *errors, game_state *state) {
     // drawing to render texture, diff
     // find overlap rectangle
 
-    printf("Got overlap rect %f,%f,%f,%f\n", state->image_overlap.x, state->image_overlap.y,
-            state->image_overlap.width, state->image_overlap.height);
+    printf("Got overlap rect %f,%f,%f,%f\n", state->image_overlap.x,
+           state->image_overlap.y, state->image_overlap.width,
+           state->image_overlap.height);
 
     printf("images at %f,%f %f,%f\n", state->image1_loc.x, state->image1_loc.y,
-            state->image2_loc.x, state->image2_loc.y);
+           state->image2_loc.x, state->image2_loc.y);
     ClearBackground(BLANK);
     uint64_t start = get_current_ms();
     uint16_t pixels_drawn = 0;
-    Vector2 col_topr = (Vector2){state->image_overlap.x, state->image_overlap.y};
-    for (int j = state->image_overlap.y; j < state->image_overlap.y + state->image_overlap.height;
-          j++) {
-      for (int i = state->image_overlap.x; i < state->image_overlap.x + state->image_overlap.width;
-            i++) {
+    Vector2 col_topr =
+        (Vector2){state->image_overlap.x, state->image_overlap.y};
+    for (int j = state->image_overlap.y;
+         j < state->image_overlap.y + state->image_overlap.height; j++) {
+      for (int i = state->image_overlap.x;
+           i < state->image_overlap.x + state->image_overlap.width; i++) {
         // get color of both at current location
         Color image1_pixel =
             image1_colors[state->image1.width * (j - (int)state->image1_loc.y) +
@@ -211,8 +323,13 @@ void render(bool *running, char *errors, game_state *state) {
 
     uint64_t stop = get_current_ms();
     printf("making image diff mask was took %ld at %f,%f drew %d pixels\n",
-            stop - start, state->image_overlap.x, state->image_overlap.y, pixels_drawn);
+           stop - start, state->image_overlap.x, state->image_overlap.y,
+           pixels_drawn);
 
+    EndTextureMode();
+
+    BeginTextureMode(state->diff_text);
+    DrawBestPath(state->diff_text.texture, state->image_overlap);
     EndTextureMode();
     need_update_diff = false;
   }
@@ -222,13 +339,13 @@ void render(bool *running, char *errors, game_state *state) {
   DrawTextureV(state->texture2, state->image2_loc, WHITE);
 
   DrawTextureRec(state->diff_text.texture,
-                  (Rectangle){0, 0, (float)state->diff_text.texture.width,
-                              (float)-state->diff_text.texture.height},
-  (Vector2){state->image_overlap.x, state->image_overlap.y}, WHITE);
+                 (Rectangle){0, 0, (float)state->diff_text.texture.width,
+                             (float)-state->diff_text.texture.height},
+                 (Vector2){state->image_overlap.x, state->image_overlap.y},
+                 WHITE);
   if (errors) {
     DrawText(errors, 0, 0, 6, RED);
   }
   EndMode2D();
   EndDrawing();
-
 }
