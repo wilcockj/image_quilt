@@ -88,4 +88,6 @@ void heap_foreach(heap *h, void (*func)(void *, void *));
  */
 void heap_destroy(heap *h);
 
+int heap_update_key(heap *h, void *key, void *new_value);
+
 #endif

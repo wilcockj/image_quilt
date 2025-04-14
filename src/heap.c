@@ -366,3 +366,74 @@ void heap_foreach(heap *h, void (*func)(void *, void *)) {
     func(entry->key, entry->value);
   }
 }
+
+// Updates the value for a given key and re-heapifies
+int heap_update_key(heap *h, void *key, void *new_value) {
+  assert(h != NULL);
+
+  int (*cmp_func)(void *, void *) = h->compare_func;
+  heap_entry *table = h->table;
+  int entries = h->active_entries;
+
+  int index = -1;
+  // Step 1: Find the index of the key
+  for (int i = 0; i < entries; i++) {
+    heap_entry *entry = GET_ENTRY(i, table);
+    if (cmp_func(entry->key, key) == 0) {
+      index = i;
+      break;
+    }
+  }
+
+  if (index == -1) {
+    return 0; // Key not found
+  }
+
+  heap_entry *current = GET_ENTRY(index, table);
+  current->value = new_value;
+
+  // Step 2: Bubble up or down if needed
+  int parent_index = PARENT_ENTRY(index);
+
+  // Try bubbling up first
+  while (index > 0) {
+    heap_entry *parent = GET_ENTRY(parent_index, table);
+    if (cmp_func(current->key, parent->key) < 0) {
+      SWAP_ENTRIES(current, parent);
+      index = parent_index;
+      current = parent;
+      parent_index = PARENT_ENTRY(index);
+    } else {
+      break;
+    }
+  }
+
+  // If bubble up did nothing, try bubbling down
+  if (index == -1 || current == GET_ENTRY(index, table)) {
+    int left_child_index;
+    while ((left_child_index = LEFT_CHILD(index)) < entries) {
+      int smallest = index;
+      int right_child_index = RIGHT_CHILD(index);
+
+      if (left_child_index < entries &&
+          cmp_func(GET_ENTRY(left_child_index, table)->key,
+                   GET_ENTRY(smallest, table)->key) < 0) {
+        smallest = left_child_index;
+      }
+
+      if (right_child_index < entries &&
+          cmp_func(GET_ENTRY(right_child_index, table)->key,
+                   GET_ENTRY(smallest, table)->key) < 0) {
+        smallest = right_child_index;
+      }
+
+      if (smallest == index)
+        break;
+
+      SWAP_ENTRIES(GET_ENTRY(index, table), GET_ENTRY(smallest, table));
+      index = smallest;
+    }
+  }
+
+  return 1; // Success
+}

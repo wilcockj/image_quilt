@@ -169,6 +169,7 @@ void DrawBestPathMinHeap(Texture diff_text, Rectangle image_overlap) {
 
   int current = -1;
 
+  int nodes_visited = 0;
   while (h.active_entries > 0) {
     int *heap_key;
     int *value;
@@ -214,11 +215,14 @@ void DrawBestPathMinHeap(Texture diff_text, Rectangle image_overlap) {
             *key = v;
             int *val = malloc(sizeof(int));
             *val = alt;
-            heap_insert(&h, key, val);
+            if (heap_update_key(&h, key, val) == 0) {
+              heap_insert(&h, key, val);
+            }
           }
         }
       }
     }
+    nodes_visited++;
   }
 
   int min_cost = INT_MAX;
@@ -237,6 +241,7 @@ void DrawBestPathMinHeap(Texture diff_text, Rectangle image_overlap) {
     DrawPixel(x, y, RED);
     current = prev[current];
   }
+  printf("Visited %d nodes\n", nodes_visited);
 
   heap_destroy(&h);
   free(prev);
