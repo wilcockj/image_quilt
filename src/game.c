@@ -1,4 +1,5 @@
 #include "game.h"
+#include "heap.h"
 #include <limits.h>
 #include <raylib.h>
 #include <raymath.h>
@@ -12,6 +13,14 @@ Color *image2_colors;
 bool need_update_diff;
 
 #define MAX_DIFF 441.67 // sqrt(255^2 + 255^2 + 255^2)
+
+uint64_t get_current_ms() {
+
+  struct timespec time;
+  clock_gettime(CLOCK_MONOTONIC_RAW, &time);
+  uint64_t ms_timestamp = (time.tv_sec) * 1000 + (time.tv_nsec) / 1000000;
+  return ms_timestamp;
+}
 
 void DrawBestPath(Texture diff_text, Rectangle image_overlap) {
 
@@ -35,10 +44,8 @@ void DrawBestPath(Texture diff_text, Rectangle image_overlap) {
 
   for (int i = 0; i < width * height; i++) {
     prev[i] = -1;
-    int x = i % width;
-    int y = i / width;
     if (i < width) {
-      dist[i] = diff_colors[(width - x) + (y - height) * width].r;
+      dist[i] = diff_colors[i].r;
     } else {
       dist[i] = UINT16_MAX;
     }
@@ -119,12 +126,92 @@ void DrawBestPath(Texture diff_text, Rectangle image_overlap) {
   UnloadImage(full_image);
 }
 
-uint64_t get_current_ms() {
+void DrawBestPathMinHeap(Texture diff_text, Rectangle image_overlap) {
+  // UNFORMATED
+  Image full_image = LoadImageFromTexture(diff_text);
 
-  struct timespec time;
-  clock_gettime(CLOCK_MONOTONIC_RAW, &time);
-  uint64_t ms_timestamp = (time.tv_sec) * 1000 + (time.tv_nsec) / 1000000;
-  return ms_timestamp;
+  // get image of just the overlap part
+  Image diff_image = ImageFromImage(full_image, image_overlap);
+  Color *diff_colors = LoadImageColors(diff_image);
+  int width = (int)image_overlap.width;
+  int height = (int)image_overlap.height;
+
+  int *dist = malloc(sizeof(int) * width * height);
+
+  int32_t *prev =
+      calloc(sizeof(int32_t), image_overlap.width * image_overlap.height);
+  heap h;
+  heap_create(&h, 0, NULL);
+
+  for (int i = 0; i < width * height; i++) {
+    prev[i] = -1;
+
+    if (i < width) {
+      int *key = malloc(sizeof(int));
+      *key = i;
+      int *val = malloc(sizeof(int));
+      *val = diff_colors[i].r;
+
+      dist[i] = diff_colors[i].r;
+      heap_insert(&h, key, val);
+    } else {
+      dist[i] = INT_MAX;
+    }
+  }
+  int current = -1;
+  while (h.active_entries > 0) {
+    int *value;
+    int *heap_key;
+    int ret = heap_delmin(&h, (void **)&heap_key, (void **)&value);
+
+    int x = *heap_key % width;
+    int y = *heap_key / width;
+
+    if (*value >= width * (height - 1)) {
+      // made it to dest
+      current = *heap_key;
+      break;
+    }
+
+    for (int dy = -1; dy <= 1; dy++) {
+      for (int dx = -1; dx <= 1; dx++) {
+        if (dx == 0 && dy == 0)
+          continue;
+
+        int nx = x + dx;
+        int ny = y + dy;
+
+        if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
+          int neighbor = ny * width + nx;
+          int alt = *value + diff_colors[neighbor].r;
+          if (alt < dist[neighbor]) {
+            dist[neighbor] = alt;
+
+            prev[neighbor] = *heap_key;
+            int *key = malloc(sizeof(int));
+            *key = neighbor;
+            int *val = malloc(sizeof(int));
+            *val = alt;
+            heap_insert(&h, key, val);
+          }
+        }
+      }
+
+      // free(&(*heap_key));
+      // free(&(*value));
+    }
+
+    while (current != -1) {
+      int x = current % width;
+      int y = current / width;
+      // printf("drawing pixel at %d,%d\n", x, y);
+      DrawPixel(x, y, RED); // Or use any color you want
+      current = prev[current];
+    }
+
+    // UnloadImage(diff_image);
+    // UnloadImage(full_image);
+  }
 }
 
 float euclid_dist(Vector3 color1, Vector3 color2) {
@@ -329,7 +416,10 @@ void render(bool *running, char *errors, game_state *state) {
     EndTextureMode();
 
     BeginTextureMode(state->diff_text);
+    start = get_current_ms();
     DrawBestPath(state->diff_text.texture, state->image_overlap);
+    stop = get_current_ms();
+    printf("making best path %ld\n", stop - start);
     EndTextureMode();
     need_update_diff = false;
   }
