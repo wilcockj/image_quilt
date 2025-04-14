@@ -126,7 +126,127 @@ void DrawBestPath(Texture diff_text, Rectangle image_overlap) {
   UnloadImage(full_image);
 }
 
+unsigned char FullRenderImageColorsGetPixel(Color *colors, int full_width,
+                                            int full_height, int im_x,
+                                            int im_y) {
+  return colors[im_x + (full_height - im_y - 1) * full_width].r;
+}
+
 void DrawBestPathMinHeap(Texture diff_text, Rectangle image_overlap) {
+  Image full_image = LoadImageFromTexture(diff_text);
+  Image diff_image = ImageFromImage(full_image, image_overlap);
+  Color *diff_colors = LoadImageColors(full_image);
+  int width = (int)image_overlap.width;
+  int height = (int)image_overlap.height;
+  int size = width * height;
+
+  int *dist = malloc(sizeof(int) * size);
+  int32_t *prev = malloc(sizeof(int32_t) * size);
+
+  heap h;
+  heap_create(&h, 0, NULL);
+
+  for (int i = 0; i < size; i++) {
+    prev[i] = -1;
+
+    if (i < width) {
+      // Top row: initialize with cost = pixel brightness (r)
+      int *key = malloc(sizeof(int));
+      *key = i;
+      int *val = malloc(sizeof(int));
+      unsigned char pixel = FullRenderImageColorsGetPixel(
+          diff_colors, full_image.width, full_image.height, i % width,
+          i / height);
+      *val = pixel;
+
+      dist[i] = pixel;
+      heap_insert(&h, key, val);
+      // printf("inserting %d->%d\n", *key, *val);
+    } else {
+      dist[i] = INT_MAX;
+    }
+  }
+
+  int current = -1;
+
+  while (h.active_entries > 0) {
+    int *heap_key;
+    int *value;
+    if (!heap_delmin(&h, (void **)&heap_key, (void **)&value))
+      break;
+
+    int u = *heap_key;
+    int ux = u % width;
+    int uy = u / width;
+
+    // printf("got min %d->%d, %d,%d\n", *heap_key, *value, ux, uy);
+
+    free(heap_key);
+    free(value);
+
+    if (uy == height - 1) {
+      // Reached bottom row
+      // printf("Ended on %d,%d\n", ux, uy);
+      current = u;
+      break;
+    }
+
+    for (int dy = -1; dy <= 1; dy++) {
+      for (int dx = -1; dx <= 1; dx++) {
+        if (dx == 0 && dy == 0)
+          continue;
+
+        int nx = ux + dx;
+        int ny = uy + dy;
+
+        if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
+          int v = ny * width + nx;
+          unsigned char pixel = FullRenderImageColorsGetPixel(
+              diff_colors, full_image.width, full_image.height, nx, ny);
+          int cost = pixel;
+          int alt = dist[u] + cost;
+
+          if (alt < dist[v]) {
+            dist[v] = alt;
+            prev[v] = u;
+
+            int *key = malloc(sizeof(int));
+            *key = v;
+            int *val = malloc(sizeof(int));
+            *val = alt;
+            heap_insert(&h, key, val);
+          }
+        }
+      }
+    }
+  }
+
+  int min_cost = INT_MAX;
+  for (int x = 0; x < width; x++) {
+    int idx = (height - 1) * width + x;
+    if (dist[idx] < min_cost) {
+      min_cost = dist[idx];
+      current = idx;
+    }
+  }
+
+  // Draw best path
+  while (current != -1) {
+    int x = current % width;
+    int y = current / width;
+    DrawPixel(x, y, RED);
+    current = prev[current];
+  }
+
+  heap_destroy(&h);
+  free(prev);
+  free(dist);
+  UnloadImageColors(diff_colors);
+  UnloadImage(diff_image);
+  UnloadImage(full_image);
+}
+
+void DrawBestPathMinHeapOld(Texture diff_text, Rectangle image_overlap) {
   // UNFORMATED
   Image full_image = LoadImageFromTexture(diff_text);
 
@@ -417,7 +537,7 @@ void render(bool *running, char *errors, game_state *state) {
 
     BeginTextureMode(state->diff_text);
     start = get_current_ms();
-    DrawBestPath(state->diff_text.texture, state->image_overlap);
+    DrawBestPathMinHeap(state->diff_text.texture, state->image_overlap);
     stop = get_current_ms();
     printf("making best path %ld\n", stop - start);
     EndTextureMode();
